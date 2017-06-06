@@ -1,3 +1,4 @@
+import math
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
 
@@ -66,23 +67,170 @@ class pj_model(pj_DQN):
         ##############################################################
         ######################## END YOUR CODE #######################
 
+    def lrelu(self, x, leak=0.2, name="lrelu"):
+        """Leaky rectifier.
+        Parameters
+        ----------
+        x : Tensor
+            The tensor to apply the nonlinearity to.
+        leak : float, optional
+            Leakage parameter.
+        name : str, optional
+            Variable scope to use.
+        Returns
+        -------
+        x : Tensor
+            Output of the nonlinearity.
+        """
+        with tf.variable_scope(name):
+            f1 = 0.5 * (1 + leak)
+            f2 = 0.5 * (1 - leak)
+            return f1 * x + f2 * abs(x)
 
-    def get_q_values_op(self, state, scope, index, num_actions):
+    def get_q_values_op(self, state, scope, index, num_actions, target=False):
 	"""
 	Return Q values for all actions.
 	"""
         out = state
 
-        out1 = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
-        out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=4, stride=2)
-        out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=3, stride=1)
-        conv_out = layers.flatten(inputs=out1)
+	#self.n_filters = [32, 64, 64]
+	self.n_filters = [16, 32]
+	self.kernel_sizes = [8, 4]
+	self.strides = [4, 2]
 
-        fc_out = layers.fully_connected(inputs=conv_out, num_outputs=512, activation_fn=None)
-        fc_out = tf.nn.relu(fc_out) 
-        final_out = layers.fully_connected(inputs=fc_out, num_outputs=num_actions, activation_fn=None)
+	recon_scope = self.target_recon_scope if target else self.recon_scope
+
+	if self.recon:
+	    current_input = state
+
+	    encoder = []
+    	    shapes = []
+	    with tf.variable_scope(recon_scope):
+    	        for layer_i, n_output in enumerate(self.n_filters):
+    	            n_input = current_input.get_shape().as_list()[3]
+    	            shapes.append(current_input.get_shape().as_list())
+    	            W = tf.Variable(
+    	                tf.random_uniform([
+    	                    self.kernel_sizes[layer_i],
+    	                    self.kernel_sizes[layer_i],
+    	                    n_input, n_output],
+    	                    -1.0 / math.sqrt(n_input),
+    	                    1.0 / math.sqrt(n_input)))
+    	            b = tf.Variable(tf.zeros([n_output]))
+    	            encoder.append(W)
+    	            output = self.lrelu(
+    	                tf.add(tf.nn.conv2d(
+    	                    current_input, W, strides=[1, self.strides[layer_i], self.strides[layer_i], 1], padding='SAME'), b))
+    	            current_input = output
+
+            self.conv_out = current_input
+
+	    if not target:
+		self.encoder = encoder
+		self.shapes = shapes
+       
+	else:
+	    with tf.variable_scope(scope):
+                out1 = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
+                out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=4, stride=2)
+                out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=3, stride=1)
+                self.conv_out = out1
+
+	with tf.variable_scope(scope):
+	    conv_out_flattened = layers.flatten(inputs=self.conv_out)
+            fc_out = layers.fully_connected(inputs=conv_out_flattened, num_outputs=256, activation_fn=None)
+            fc_out = tf.nn.relu(fc_out) 
+            final_out = layers.fully_connected(inputs=fc_out, num_outputs=num_actions, activation_fn=None)
+
 
         return final_out
+
+
+    def gen_recon_op(self, state, num_actions, batch_size, encoder=None, shapes=None, target=False):
+
+	recon_scope = self.target_recon_scope if target else self.recon_scope
+	if encoder is None: 
+	    current_input = state
+
+    	    # Build the encoder
+    	    encoder = []
+    	    shapes = []
+	    with tf.variable_scope(recon_scope):
+    	        for layer_i, n_output in enumerate(self.n_filters):
+    	            n_input = current_input.get_shape().as_list()[3]
+    	            shapes.append(current_input.get_shape().as_list())
+    	            W = tf.Variable(
+    	                tf.random_uniform([
+    	                    self.kernel_sizes[layer_i],
+    	                    self.kernel_sizes[layer_i],
+    	                    n_input, n_output],
+    	                    -1.0 / math.sqrt(n_input),
+    	                    1.0 / math.sqrt(n_input)))
+    	            b = tf.Variable(tf.zeros([n_output]))
+    	            encoder.append(W)
+    	            output = self.lrelu(
+    	                tf.add(tf.nn.conv2d(
+    	                    current_input, W, strides=[1, self.strides[layer_i], self.strides[layer_i], 1], padding='SAME'), b))
+    	            current_input = output
+
+            self.conv_out = current_input
+        else:
+            current_input = self.conv_out
+
+	r_encoder = encoder[::-1]
+	r_shapes = shapes[::-1]
+	r_strides = self.strides[::-1]
+    
+        # Build the decoder using the same weights
+	with tf.variable_scope(recon_scope):
+            for layer_i, shape in enumerate(r_shapes):
+                W = r_encoder[layer_i]
+                b = tf.Variable(tf.zeros([W.get_shape().as_list()[2]]))
+                output = self.lrelu(tf.add(
+                    tf.nn.conv2d_transpose(
+                        current_input, W,
+                        tf.stack([batch_size, shape[1], shape[2], shape[3]]),
+                        strides=[1, r_strides[layer_i], r_strides[layer_i], 1], padding='SAME'), b))
+                current_input = output
+    
+        # %%
+        # now have the reconstruction through the network
+        y = current_input
+        # cost function measures pixel-wise difference
+        recon_loss = tf.reduce_sum(tf.square(y - state))
+	return recon_loss
+	
+
+    def build(self):
+        """
+        Build model by adding all necessary variables
+        """
+        # add placeholders
+        self.add_placeholders_op()
+
+        s = self.process_state(self.s)
+        sp = self.process_state(self.sp)
+        
+        self.ops = []
+	self.recon_scope = 'recon'
+	self.target_recon_scope = 'target_recon'
+        for index, env in enumerate(self.envs):
+            q_scope = "q_" + str(index)
+            target_q_scope = "target_q_" + str(index)
+
+            q = self.get_q_values_op(s, q_scope, index, env.action_space.n, target=False)
+            target_q = self.get_q_values_op(sp, target_q_scope, index, env.action_space.n, target=True)
+            if self.recon:
+                recon_loss = self.gen_recon_op(s, env.action_space.n, tf.shape(s)[0], encoder=self.encoder, shapes=self.shapes, target=False)
+                _ = self.gen_recon_op(s, env.action_space.n, tf.shape(s)[0], encoder=self.encoder, shapes=self.shapes, target=True)
+            update_target_op = self.add_update_target_op(q_scope, target_q_scope)
+            loss = self.add_loss_op(q, target_q, env.action_space.n)
+            train_op, grad_norm = self.add_optimizer_op(q_scope, loss)
+
+	    recon_train_op, recon_grad_norm = self.add_recon_opt_op(q_scope, recon_loss)
+
+            self.ops.append((q, target_q, update_target_op, loss, train_op, grad_norm))
+
 
     def add_update_target_op(self, q_scope, target_q_scope):
         """
@@ -125,8 +273,13 @@ class pj_model(pj_DQN):
         
         q_weights = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=q_scope)
         target_q_weights = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=target_q_scope)
+
+        recon_weights = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.recon_scope)
+        target_recon_weights = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.target_recon_scope)
+
         assigns = [tf.assign(target_q_weights[i], q_weights[i]) for i in xrange(len(q_weights))]
-        update_target_op = tf.group(*assigns)
+        assigns_recon = [tf.assign(target_recon_weights[i], recon_weights[i]) for i in xrange(len(recon_weights))]
+        update_target_op = tf.group(*(assigns + assigns_recon))
         return update_target_op
 
         ##############################################################
@@ -158,10 +311,7 @@ class pj_model(pj_DQN):
               - you can access placeholders like self.a (for actions)
                 self.r (rewards) or self.done_mask for instance
               - you may find the following functions useful
-                    - tf.cast
-                    - tf.reduce_max / reduce_sum
-                    - tf.one_hot
-                    - ...
+                    - tf.cast - tf.reduce_max / reduce_sum - tf.one_hot - ...
 
         (be sure that you set self.loss)
         """
@@ -212,15 +362,30 @@ class pj_model(pj_DQN):
 
         optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
         gs, vs = zip(*optimizer.compute_gradients(loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)))
+        gs_recon, vs_recon = zip(*optimizer.compute_gradients(loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.recon_scope)))
+	gs = gs + gs_recon
+	vs = vs + vs_recon
         if self.config.grad_clip is True:
             # gs, _ = tf.clip_by_global_norm(gs, self.config.clip_val)
-            gs = [tf.clip_by_norm(g, self.config.clip_val) for g in gs]
+            gs = [tf.clip_by_norm(g, self.config.clip_val) if g is not None else None for g in gs]
         grad_norm = tf.global_norm(gs)
         train_op = optimizer.apply_gradients(zip(gs, vs))
         return train_op, grad_norm
         ##############################################################
         ######################## END YOUR CODE #######################
-    
+
+    def add_recon_opt_op(self, scope, recon_loss):
+
+	optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+        gs, vs= zip(*optimizer.compute_gradients(recon_loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.recon_scope)))
+        if self.config.grad_clip is True:
+            # gs, _ = tf.clip_by_global_norm(gs, self.config.clip_val)
+            gs = [tf.clip_by_norm(g, self.config.clip_val) if g is not None else None for g in gs]
+        grad_norm = tf.global_norm(gs)
+        train_op = optimizer.apply_gradients(zip(gs, vs))
+        return train_op, grad_norm
+
+
 
 class ProgressiveModel(pj_model):
 
@@ -268,14 +433,14 @@ class ProgressiveModel(pj_model):
                 vs = tf.variable_scope(scope, reuse=False)
 
             with vs:
-                out1 = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
-                out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=4, stride=2)
-                out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=3, stride=1)
+                out1 = layers.conv2d(inputs=out, num_outputs=16, kernel_size=8, stride=4)
+                out1 = layers.conv2d(inputs=out1, num_outputs=32, kernel_size=4, stride=2)
+                #out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=3, stride=1)
                 conv_out = layers.flatten(inputs=out1)
                     
-                fc_out = layers.fully_connected(inputs=conv_out, num_outputs=512, activation_fn=None)
+                fc_out = layers.fully_connected(inputs=conv_out, num_outputs=256, activation_fn=None)
                 for co in conv_outs:
-                    fc_out += layers.fully_connected(inputs=co, num_outputs=512, activation_fn=None)
+                    fc_out += layers.fully_connected(inputs=co, num_outputs=256, activation_fn=None)
                 fc_out = tf.nn.relu(fc_out) 
 
                 if i == index:
@@ -336,6 +501,6 @@ class ProgressiveModel(pj_model):
 
 if __name__ == '__main__':
     # train model
-    #model = pj_model(config)
-    model = ProgressiveModel(config)
+    model = pj_model(config)
+    #model = ProgressiveModel(config)
     model.run()

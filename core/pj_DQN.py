@@ -39,6 +39,8 @@ class pj_DQN(DQN):
             envs.append(env)
         self.envs = envs
 
+        self.recon = self.config.recon
+
         # build model
         self.build()
 
@@ -122,6 +124,8 @@ class pj_DQN(DQN):
             loss = self.add_loss_op(q, target_q, env.action_space.n)
             train_op, grad_norm = self.add_optimizer_op(q_scope, loss)
 
+	    recon_train_op, recon_grad_norm = self.add_recon_opt_op(q_scope)
+
             self.ops.append((q, target_q, update_target_op, loss, train_op, grad_norm))
 
         # self.q_1 = self.get_q_values_op(s, "q_1")
@@ -149,23 +153,19 @@ class pj_DQN(DQN):
         # self.add_summary()
 
         # initiliaze all variables
-        init_v_list = []
-        for i in xrange(self.config.start_index, len(self.envs)):
-            q_scope = "q_" + str(i)
-            target_q_scope = "target_q_" + str(i)
-            init_v_list += tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=q_scope)
-            init_v_list += tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=target_q_scope)
-            init = tf.variables_initializer(init_v_list)
-        self.sess.run(init)
-
+        restore_v_list = []
         for i in xrange(0, self.config.start_index):
             q_scope = "q_" + str(i)
             target_q_scope = "target_q_" + str(i)
             v_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=q_scope) + \
                 tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=target_q_scope)
+            restore_v_list += v_list
             saver = tf.train.Saver({v.name:v for v in v_list})
             saver.restore(self.sess, self.config.model_output + "model_" + str(i) + ".ckpt")
 
+        init_v_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+        init = tf.variables_initializer(list(set(init_v_list)-set(restore_v_list)))
+        self.sess.run(init)
         # synchronise q and target_q networks
         #self.sess.run(self.update_target_op)
 

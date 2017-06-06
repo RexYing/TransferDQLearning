@@ -2,11 +2,12 @@ class config():
     # env config
     render_train     = False
     render_test      = False
-    env_names         = ["PongNoFrameskip-v4", "BreakoutNoFrameskip-v4"]
+    env_names         = ["PongNoFrameskip-v4", "BoxingNoFrameskip-v4"]
     overwrite_render = True
     record           = True
     high             = 255.
-    progressive      = True
+    
+    recon            = True
 
     # output config
     output_path  = "results/pj_nature/"
@@ -26,7 +27,7 @@ class config():
     soft_epsilon      = 0.05
 
     # nature paper hyper params
-    nsteps_train       = 250
+    nsteps_train       = 2500000
     batch_size         = 32
     buffer_size        = 1000000
     target_update_freq = 10000
