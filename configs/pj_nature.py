@@ -6,6 +6,7 @@ class config():
     overwrite_render = True
     record           = True
     high             = 255.
+    progressive      = True
 
     # output config
     output_path  = "results/pj_nature/"
@@ -40,3 +41,5 @@ class config():
     eps_end            = 0.1
     eps_nsteps         = 1500000
     learning_start     = 50000
+    start_index        = 0
+

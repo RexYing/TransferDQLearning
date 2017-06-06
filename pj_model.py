@@ -68,111 +68,21 @@ class pj_model(pj_DQN):
 
 
     def get_q_values_op(self, state, scope, index, num_actions):
-        """
-        Returns Q values for all actions
-
-        Args:
-            state: (tf tensor) 
-                shape = (batch_size, img height, img width, nchannels)
-            scope: (string) scope name, that specifies if target network or not
-            reuse: (bool) reuse of variables in the scope
-
-        Returns:
-            out: (tf tensor) of shape = (batch_size, num_actions)
-        """
-        # this information might be useful
-        # num_actions = self.env.action_space.n
+	"""
+	Return Q values for all actions.
+	"""
         out = state
 
-        ##############################################################
-        """
-        TODO: implement a fully connected with no hidden layer (linear
-            approximation) using tensorflow. In other words, if your state s
-            has a flattened shape of n, and you have m actions, the result of 
-            your computation sould be equal to
-                W s where W is a matrix of shape m x n
+        out1 = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
+        out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=4, stride=2)
+        out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=3, stride=1)
+        conv_out = layers.flatten(inputs=out1)
 
-        HINT: you may find tensorflow.contrib.layers useful (imported)
-              make sure to understand the use of the scope param
-
-              you can use any other methods from tensorflow
-              you are not allowed to import extra packages (like keras,
-              lasagne, cafe, etc.)
-        """
-        ##############################################################
-        ################ YOUR CODE HERE - 2-3 lines ################## 
-        conv_outs = []
-        fc_outs = []
-        for i in xrange(0, index + 1):
-            if i != index:
-                vs = tf.variable_scope("q_" + str(i), reuse=True)
-            else:
-                vs = tf.variable_scope(scope, reuse=False)
-
-            with vs:
-                out1 = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
-                out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=4, stride=2)
-                out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=3, stride=1)
-                conv_out = layers.flatten(inputs=out1)
-                    
-                fc_out = layers.fully_connected(inputs=conv_out, num_outputs=512, activation_fn=None)
-                for co in conv_outs:
-                    fc_out += layers.fully_connected(inputs=co, num_outputs=512, activation_fn=None)
-                fc_out = tf.nn.relu(fc_out) 
-
-                if i == index:
-                    final_out = layers.fully_connected(inputs=fc_out, num_outputs=num_actions, activation_fn=None)
-                    for fco in fc_outs:
-                        final_out += layers.fully_connected(inputs=fco, num_outputs=num_actions, activation_fn=None)
-                else:
-                    conv_outs.append(conv_out)
-                    fc_outs.append(fc_out)    
-
-        # with tf.variable_scope(scope, reuse=False):
-        #     out = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
-        #     out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=4, stride=2)
-        #     out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=3, stride=1)
-        #     out = layers.flatten(inputs=out)
-        #     out = layers.fully_connected(inputs=out, num_outputs=512)
-        #     out = layers.fully_connected(inputs=out, num_outputs=num_actions, activation_fn=None)
-        
-        # if prev_scope is None:
-        #     with tf.variable_scope(scope, reuse=False):
-        #         out = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
-        #         out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=4, stride=2)
-        #         out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=3, stride=1)
-        #         out = layers.flatten(inputs=out)
-        #         out = layers.fully_connected(inputs=out, num_outputs=512)
-        #         out = layers.fully_connected(inputs=out, num_outputs=num_actions, activation_fn=None)
-        # else:
-        #     with tf.variable_scope(prev_scope, reuse=True):
-        #         out1 = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
-        #         out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=4, stride=2)
-        #         out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=3, stride=1)
-        #         out1 = layers.flatten(inputs=out1)
-        #         out2 = layers.fully_connected(inputs=out1, num_outputs=512)
-        #     with tf.variable_scope(scope, reuse=False):
-        #         out = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
-        #         out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=4, stride=2)
-        #         out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=3, stride=1)
-        #         out = layers.flatten(inputs=out)
-
-        #         num_out1 = out1.get_shape().as_list()[1]
-        #         num_out2 = out2.get_shape().as_list()[1]
-        #         out1 = layers.fully_connected(inputs=out1, num_outputs=num_out1)
-        #         out2 = layers.fully_connected(inputs=out2, num_outputs=num_out2)
-
-        #         out = tf.nn.relu(layers.fully_connected(inputs=out, num_outputs=512, activation_fn=None) + \
-        #             layers.fully_connected(inputs=out1, num_outputs=512, activation_fn=None))
-
-        #         out = layers.fully_connected(inputs=out, num_outputs=num_actions, activation_fn=None) + \
-        #             layers.fully_connected(inputs=out2, num_outputs=num_actions, activation_fn=None)
-
-        ##############################################################
-        ######################## END YOUR CODE #######################
+        fc_out = layers.fully_connected(inputs=conv_out, num_outputs=512, activation_fn=None)
+        fc_out = tf.nn.relu(fc_out) 
+        final_out = layers.fully_connected(inputs=fc_out, num_outputs=num_actions, activation_fn=None)
 
         return final_out
-
 
     def add_update_target_op(self, q_scope, target_q_scope):
         """
@@ -312,8 +222,120 @@ class pj_model(pj_DQN):
         ######################## END YOUR CODE #######################
     
 
+class ProgressiveModel(pj_model):
+
+    def get_q_values_op(self, state, scope, index, num_actions):
+        """
+        Returns Q values for all actions
+	Cross connections from the hidden layers of the previous envs are added.
+
+        Args:
+            state: (tf tensor) 
+                shape = (batch_size, img height, img width, nchannels)
+            scope: (string) scope name, that specifies if target network or not
+            reuse: (bool) reuse of variables in the scope
+
+        Returns:
+            out: (tf tensor) of shape = (batch_size, num_actions)
+        """
+        # this information might be useful
+        # num_actions = self.env.action_space.n
+        out = state
+
+        ##############################################################
+        """
+        TODO: implement a fully connected with no hidden layer (linear
+            approximation) using tensorflow. In other words, if your state s
+            has a flattened shape of n, and you have m actions, the result of 
+            your computation sould be equal to
+                W s where W is a matrix of shape m x n
+
+        HINT: you may find tensorflow.contrib.layers useful (imported)
+              make sure to understand the use of the scope param
+
+              you can use any other methods from tensorflow
+              you are not allowed to import extra packages (like keras,
+              lasagne, cafe, etc.)
+        """
+        ##############################################################
+        ################ YOUR CODE HERE - 2-3 lines ################## 
+        conv_outs = []
+        fc_outs = []
+        for i in xrange(0, index + 1):
+            if i != index:
+                vs = tf.variable_scope("q_" + str(i), reuse=True)
+            else:
+                vs = tf.variable_scope(scope, reuse=False)
+
+            with vs:
+                out1 = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
+                out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=4, stride=2)
+                out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=3, stride=1)
+                conv_out = layers.flatten(inputs=out1)
+                    
+                fc_out = layers.fully_connected(inputs=conv_out, num_outputs=512, activation_fn=None)
+                for co in conv_outs:
+                    fc_out += layers.fully_connected(inputs=co, num_outputs=512, activation_fn=None)
+                fc_out = tf.nn.relu(fc_out) 
+
+                if i == index:
+                    final_out = layers.fully_connected(inputs=fc_out, num_outputs=num_actions, activation_fn=None)
+                    for fco in fc_outs:
+                        final_out += layers.fully_connected(inputs=fco, num_outputs=num_actions, activation_fn=None)
+                else:
+                    conv_outs.append(conv_out)
+                    fc_outs.append(fc_out)    
+
+        # with tf.variable_scope(scope, reuse=False):
+        #     out = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
+        #     out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=4, stride=2)
+        #     out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=3, stride=1)
+        #     out = layers.flatten(inputs=out)
+        #     out = layers.fully_connected(inputs=out, num_outputs=512)
+        #     out = layers.fully_connected(inputs=out, num_outputs=num_actions, activation_fn=None)
+        
+        # if prev_scope is None:
+        #     with tf.variable_scope(scope, reuse=False):
+        #         out = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
+        #         out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=4, stride=2)
+        #         out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=3, stride=1)
+        #         out = layers.flatten(inputs=out)
+        #         out = layers.fully_connected(inputs=out, num_outputs=512)
+        #         out = layers.fully_connected(inputs=out, num_outputs=num_actions, activation_fn=None)
+        # else:
+        #     with tf.variable_scope(prev_scope, reuse=True):
+        #         out1 = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
+        #         out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=4, stride=2)
+        #         out1 = layers.conv2d(inputs=out1, num_outputs=64, kernel_size=3, stride=1)
+        #         out1 = layers.flatten(inputs=out1)
+        #         out2 = layers.fully_connected(inputs=out1, num_outputs=512)
+        #     with tf.variable_scope(scope, reuse=False):
+        #         out = layers.conv2d(inputs=out, num_outputs=32, kernel_size=8, stride=4)
+        #         out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=4, stride=2)
+        #         out = layers.conv2d(inputs=out, num_outputs=64, kernel_size=3, stride=1)
+        #         out = layers.flatten(inputs=out)
+
+        #         num_out1 = out1.get_shape().as_list()[1]
+        #         num_out2 = out2.get_shape().as_list()[1]
+        #         out1 = layers.fully_connected(inputs=out1, num_outputs=num_out1)
+        #         out2 = layers.fully_connected(inputs=out2, num_outputs=num_out2)
+
+        #         out = tf.nn.relu(layers.fully_connected(inputs=out, num_outputs=512, activation_fn=None) + \
+        #             layers.fully_connected(inputs=out1, num_outputs=512, activation_fn=None))
+
+        #         out = layers.fully_connected(inputs=out, num_outputs=num_actions, activation_fn=None) + \
+        #             layers.fully_connected(inputs=out2, num_outputs=num_actions, activation_fn=None)
+
+        ##############################################################
+        ######################## END YOUR CODE #######################
+
+        return final_out
+
+
+
 
 if __name__ == '__main__':
     # train model
-    model = pj_model(config)
+    #model = pj_model(config)
+    model = ProgressiveModel(config)
     model.run()

@@ -149,8 +149,22 @@ class pj_DQN(DQN):
         # self.add_summary()
 
         # initiliaze all variables
-        init = tf.global_variables_initializer()
+        init_v_list = []
+        for i in xrange(self.config.start_index, len(self.envs)):
+            q_scope = "q_" + str(i)
+            target_q_scope = "target_q_" + str(i)
+            init_v_list += tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=q_scope)
+            init_v_list += tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=target_q_scope)
+            init = tf.variables_initializer(init_v_list)
         self.sess.run(init)
+
+        for i in xrange(0, self.config.start_index):
+            q_scope = "q_" + str(i)
+            target_q_scope = "target_q_" + str(i)
+            v_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=q_scope) + \
+                tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=target_q_scope)
+            saver = tf.train.Saver({v.name:v for v in v_list})
+            saver.restore(self.sess, self.config.model_output + "model_" + str(i) + ".ckpt")
 
         # synchronise q and target_q networks
         #self.sess.run(self.update_target_op)
@@ -203,7 +217,13 @@ class pj_DQN(DQN):
         if not os.path.exists(self.config.model_output):
             os.makedirs(self.config.model_output)
 
-        self.saver.save(self.sess, self.config.model_output + "model_" + str(self.index) + ".ckpt")
+        q_scope = "q_" + str(self.index)
+        target_q_scope = "target_q_" + str(self.index)
+        v_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=q_scope) + \
+            tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=target_q_scope)
+        saver = tf.train.Saver({v.name:v for v in v_list})
+        saver.save(self.sess, self.config.model_output + "model_" + str(self.index) + ".ckpt")
+        # self.saver.save(self.sess, self.config.model_output + "model_" + str(self.index) + ".ckpt")
 
 
     def get_best_action(self, state):
@@ -284,6 +304,8 @@ class pj_DQN(DQN):
 
         config = self.config
         for index, env in enumerate(self.envs):
+            if index < self.config.start_index:
+                continue
             exp_schedule = LinearExploration(env, config.eps_begin, 
                 config.eps_end, config.eps_nsteps)
 
