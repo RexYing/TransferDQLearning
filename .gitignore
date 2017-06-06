@@ -1,0 +1,10 @@
+/results
+
+*.pyc
+*.sw?
+.env/
+*.pkl
+*/events.*
+
+.DS_Store
+
