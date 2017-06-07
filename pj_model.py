@@ -92,6 +92,9 @@ class pj_model(pj_DQN):
 	Return Q values for all actions.
 	"""
         out = state
+	state_prev = tf.slice(out, [0, 0, 0, 0], [-1, -1, -1, 3])
+	state_next = tf.slice(out, [0, 0, 0, 1], [-1, -1, -1, -1])
+	out = state_next - state_prev
 
 	#self.n_filters = [32, 64, 64]
 	self.n_filters = [16, 32]
@@ -101,7 +104,7 @@ class pj_model(pj_DQN):
 	recon_scope = self.target_recon_scope if target else self.recon_scope
 
 	if self.recon:
-	    current_input = state
+	    current_input = out
 
 	    encoder = []
     	    shapes = []
@@ -227,7 +230,7 @@ class pj_model(pj_DQN):
             loss = self.add_loss_op(q, target_q, env.action_space.n)
             train_op, grad_norm = self.add_optimizer_op(q_scope, loss)
 
-	    recon_train_op, recon_grad_norm = self.add_recon_opt_op(q_scope, recon_loss)
+	    #recon_train_op, recon_grad_norm = self.add_recon_opt_op(q_scope, recon_loss)
 
             self.ops.append((q, target_q, update_target_op, loss, train_op, grad_norm))
 
@@ -362,9 +365,10 @@ class pj_model(pj_DQN):
 
         optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
         gs, vs = zip(*optimizer.compute_gradients(loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)))
-        gs_recon, vs_recon = zip(*optimizer.compute_gradients(loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.recon_scope)))
-	gs = gs + gs_recon
-	vs = vs + vs_recon
+	if self.recon:
+            gs_recon, vs_recon = zip(*optimizer.compute_gradients(loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.recon_scope)))
+	    gs = gs + gs_recon
+	    vs = vs + vs_recon
         if self.config.grad_clip is True:
             # gs, _ = tf.clip_by_global_norm(gs, self.config.clip_val)
             gs = [tf.clip_by_norm(g, self.config.clip_val) if g is not None else None for g in gs]
