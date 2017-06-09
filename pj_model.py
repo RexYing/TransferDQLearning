@@ -151,6 +151,10 @@ class pj_model(pj_DQN):
 
     def gen_recon_op(self, state, num_actions, batch_size, encoder=None, shapes=None, target=False):
 
+	state_prev = tf.slice(state, [0, 0, 0, 0], [-1, -1, -1, 3])
+	state_next = tf.slice(state, [0, 0, 0, 1], [-1, -1, -1, -1])
+	state = state_next - state_prev
+
 	recon_scope = self.target_recon_scope if target else self.recon_scope
 	if encoder is None: 
 	    current_input = state
@@ -200,7 +204,7 @@ class pj_model(pj_DQN):
         # now have the reconstruction through the network
         y = current_input
         # cost function measures pixel-wise difference
-        recon_loss = tf.reduce_sum(tf.square(y - state))
+        recon_loss = tf.reduce_mean(tf.square(y - state))
 	return recon_loss
 	
 

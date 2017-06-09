@@ -149,7 +149,8 @@ def train():
             loss_eval, grad_norm_eval, y_train, _ = sess.run([loss, grad_norm, y, train_op], feed_dict={s: batch})
             prog.update(step, [("train loss", loss_eval), ("grad norm", grad_norm_eval)])
             step += 1
-	plt.imshow(y_train[0,:,:,0])
+	plt.imshow(y_train[0,:,:,0], cmap='Greys')
+	plt.savefig('y.png')
 
         #eval
         #prog = Progbar(target=1 + int(len(eval_data) / config.batch_size)) 

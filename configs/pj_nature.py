@@ -7,7 +7,7 @@ class config():
     record           = True
     high             = 255.
     
-    recon            = False
+    recon            = True
 
     # output config
     output_path  = "results/pj_nature/"
