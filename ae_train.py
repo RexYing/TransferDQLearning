@@ -2,6 +2,7 @@ from __future__ import print_function
 import os
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
+from tensorflow.examples.tutorials.mnist import input_data
 import numpy as np
 import math
 from configs.ae_train import config
@@ -88,11 +89,12 @@ def autoencoder():
 
 def vae():
     # input to the network
-    state_shape = [84, 84, 1]
+    state_shape = [28, 28, 1]
     img_height = state_shape[0]
     img_width = state_shape[1]
     nchannels = state_shape[2]
-    s = tf.placeholder(tf.uint8, shape=(None, img_height, img_width, nchannels * config.state_history), name="s")
+    #s = tf.placeholder(tf.uint8, shape=(None, img_height, img_width, nchannels * config.state_history), name="s")
+    s = tf.placeholder(tf.uint8, shape=(None, img_height, img_width, nchannels), name="s")
 
     state = tf.cast(s, tf.float32)
     state /= 255
@@ -110,8 +112,12 @@ def vae():
             for layer_i, n_output in enumerate(n_filters):
                 n_input = current_input.get_shape().as_list()[3]
                 shapes.append(current_input.get_shape().as_list())
-                W = tf.Variable(tf.random_uniform([kernel_sizes[layer_i], kernel_sizes[layer_i], n_input, n_output],
-                    -1.0 / math.sqrt(n_input), 1.0 / math.sqrt(n_input)), name="conv_W_" + str(layer_i))
+                #W = tf.Variable(tf.random_uniform([kernel_sizes[layer_i], kernel_sizes[layer_i], n_input, n_output],
+                #    -1.0 / math.sqrt(n_input), 1.0 / math.sqrt(n_input)), name="conv_W_" + str(layer_i))
+                W = tf.get_variable("conv_W_" + str(layer_i), shape=(kernel_sizes[layer_i], kernel_sizes[layer_i], n_input, n_output),
+                                         dtype=tf.float32, 
+                                         initializer=tf.contrib.layers.xavier_initializer())
+                                         #regularizer=tf.contrib.layers.l2_regularizer(FLAGS.weight_decay))
                 b = tf.Variable(tf.zeros([n_output]), name="conv_b_" + str(layer_i))
                 encoder.append(W)
                 output = tf.nn.relu(tf.add(tf.nn.conv2d(current_input, W, 
@@ -173,7 +179,7 @@ def minibatches(data, batch_size):
 def load_data():
     #data = np.load(config.input_path + "frames_0_5.npz")
     data = {}
-    for i in xrange(100000):
+    for i in xrange(1000):
         data[i] = np.random.randint(0,high=255,size=(84,84,4),dtype=np.uint8)
 
     # data = np.load('mat.npz')
@@ -184,6 +190,9 @@ def load_data():
             eval_data.append(np.expand_dims(data[key], axis=0))
         else:
             train_data.append(np.expand_dims(data[key], axis=0))
+    mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+    train_data = np.reshape(mnist.train.images, (-1, 1, 28, 28, 1))
+    eval_data = np.reshape(mnist.test.images, (-1, 1, 28, 28, 1))
     return np.array(train_data), np.array(eval_data)
 
 def save(sess):
